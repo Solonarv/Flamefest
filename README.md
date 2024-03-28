@@ -2,6 +2,12 @@
 
 A Rift Wizard mod full of extra fire options, because there clearly aren't enough of those yet ;)
 
+## Installing
+
+Download a zip from the []
+
+## Content
+
 ### Spells
 
 #### Flame Wave

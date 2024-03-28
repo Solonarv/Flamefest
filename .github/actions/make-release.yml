@@ -1,0 +1,21 @@
+on:
+  push:
+    tags:
+      - 'v*'
+
+name: Create Release
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Package
+        run: zip -r Flamefest.zip . -x '.git/*' '.github/*'
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Flamefest.zip
+          make_latest: true
