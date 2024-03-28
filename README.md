@@ -4,7 +4,18 @@ A Rift Wizard mod full of extra fire options, because there clearly aren't enoug
 
 ## Installing
 
-Download a zip from the []
+This mod requires [AAA_Loader](https://github.com/DaedalusGame/AAA_Loader). Install that first.
+
+Download a zip from the [Releases](https://github.com/Solonarv/Flamefest/releases) page and unzip it as a directory in Rift Wizard's `mods` folder.
+
+You should end up with a folder structure like this:
+```
+mods/
+    AAA_Loader/
+        AAA_Loader.py
+    Flamefest/
+        Flamefest.py
+```
 
 ## Content
 
