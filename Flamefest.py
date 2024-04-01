@@ -7,11 +7,11 @@ import random
 class Flamewave(Spell):
 
     def on_init(self):
-        self.name = "Flame Wave"
+        self.name = "Pyroclasm"
         self.tags = [Tags.Sorcery, Tags.Fire]
         self.level = 4
         self.damage = 23
-        self.max_charges = 9
+        self.max_charges = 6
         self.range = 12
         self.angle = math.pi / 4.0
         self.element = Tags.Fire
@@ -25,7 +25,8 @@ class Flamewave(Spell):
         #self.firestorm = 1 # just for testing
 
     def get_description(self):
-        return "Unleash a slow-moving wave of fire that deals [{damage}:damage] [fire] damage to units in a [{range}_tile:range] cone. Max 1 flamewave at a time.".format(**self.fmt_dict())
+        return ("Unleash a slow-moving wave of fire that deals [{damage}:damage] [fire] damage to units in a [{range}_tile:range] cone. Max 1 pyroclasm at a time."
+                ).format(**self.fmt_dict())
     
     def aoe(self, target):
         origin = get_cast_point(self.caster.x, self.caster.y, target.x, target.y)
@@ -45,7 +46,7 @@ class Flamewave(Spell):
 class FlamewaveEnd(Spell):
     
     def on_init(self):
-        self.name = "Flame Wave End"
+        self.name = "Pyroclasm End"
         # Not a "real" spell - no level, no tags
         # self.level = 1
         # self.tags = [Tags.Fire]
@@ -53,7 +54,7 @@ class FlamewaveEnd(Spell):
         self.range = 0
 
     def get_description(self):
-        return "End an ongoing Flame Wave spell."
+        return "End an ongoing Pyroclasm spell."
 
     def cast_instant(self, x, y):
         self.caster.remove_buffs(FlamewaveBuff)
@@ -94,6 +95,133 @@ class FlamewaveBuff(Buff):
             if self.firestorm and is_last:
                 self.owner.level.add_obj(FireCloud(self.owner, self.damage//2), point.x, point.y)
 
+
+class ForgeStrike(Spell):
+    def on_init(self):
+        self.name = "Forge Strike"
+        self.level = 2
+        self.tags = [Tags.Sorcery, Tags.Metallic, Tags.Fire]
+        self.max_charges = 16
+        self.range = 1
+        self.melee = True
+        self.damage = 18
+        self.radius = 5
+        self.angle = math.pi / 6.0
+        self.can_target_self = False
+    
+    def get_description(self):
+        return ("Slam down a hammer strike onto the target tile dealing [{damage}_physical:physical] damage.\n"
+                "Then a wave of forge fire washes out, burning all units in a [{radius}_tile:radius] cone for [{damage}_fire:fire] damage."
+                ).format(**self.fmt_dict())
+    
+    def aoe(self, x, y):
+        return Burst(self.caster.level, 
+                     Point(self.caster.x, self.caster.y), 
+                     self.get_stat('radius'), 
+                     burst_cone_params=BurstConeParams(Point(x, y), self.angle), 
+                     ignore_walls=self.get_stat('melt_walls'))
+    
+    def cast(self, x, y):
+        self.owner.level.deal_damage(x, y, self.get_stat('damage'), Tags.Physical, self)
+        yield
+
+        for stage in self.aoe(x, y):
+            for point in stage:
+                self.owner.level.deal_damage(point.x, point.y, self.get_stat('damage'), Tags.Fire, self)
+            yield
+
+    def get_impacted_tiles(self, x, y):
+        return [p for stage in self.aoe(x,y) for p in stage]
+
+
+class ConjureBlade(Spell):
+    def on_init(self):
+        self.name = "Conjure Blade"
+        self.level = 3
+        self.tags = [Tags.Conjuration, Tags.Metallic]
+        self.max_charges = 3
+        self.duration = 12
+        self.range = 0
+        self.radius = 5
+        self.damage = 29
+        self.can_target_self = True
+
+        self.active = False
+    
+    def get_description(self):
+        return ("Conjure a magic greatsword that you can swing in great arcs dealing [{damage}_physical:physical] damage.\n"
+                "The sword lasts for [{duration}_turns:duration]"
+                ).format(**self.fmt_dict())
+    
+    def cast_instant(self, x, y):
+        self.caster.apply_buff(ConjureBladeBuff(self), self.get_stat('duration'))
+
+class ConjureBladeBuff(Buff):
+    def __init__(self, spell):
+        Buff.__init__(self)
+        self.spell = spell
+        self.name = spell.name
+
+        self.color = Tags.Metallic.color
+        self.buff_type = BUFF_TYPE_NONE
+        self.stack_type = STACK_REPLACE
+
+        # self.spells = [ConjureBladeSwing()] # have to do this manually
+    
+    def on_applied(self, owner):
+        if self.spell not in owner.spells:
+            return
+        owner.add_spell(ConjureBladeSwing(self.spell))
+
+class ConjureBladeSwing(Spell):
+    own_stats = set(["max_charges", "range"])
+
+    def __init__(self, parent):
+        self.parent = parent
+        super().__init__()
+    
+    def on_init(self):
+        self.name = "Great Cleave"
+        self.level = self.parent.level
+        self.tags = self.parent.tags
+        self.angle = math.pi / 3
+    
+    def get_stat(self, stat, base=None):
+        if stat in ConjureBladeSwing.own_stats:
+            return super().get_stat(stat, base)
+        else:
+            return self.parent.get_stat(stat, base)
+    
+    def aoe(self, x, y):
+        origin = Point(self.owner.x, self.owner.y)
+        dist = self.get_stat('radius')
+        step_size = 0.4 / dist
+        midline = get_line_angle(...) # TODO
+        angle = midline - self.angle
+        already_hit = set()
+        while angle < midline + self.angle:
+            dx = cos(angle)
+            dy = sin(angle)
+            r = 1
+            stage = []
+            last_p = None
+            while r <= dist:
+                p = Point(dx*r, dy*r)
+                if not self.owner.level.can_walk(p.x, p.y):
+                    break
+                if p != last_p and p not in already_hit:
+                    already_hit.insert(p)
+                    stage.append(p)
+            if stage:
+                yield stage
+            angle += step_size
+
+    def cast(self, x, y):
+        for stage in self.aoe(x, y):
+            for point in stage:
+                self.owner.level.deal_damage(point.x, point.y, self.get_stat('damage'), Tags.Physical, self)
+            yield
+        
 
         
 class FireCloudPatch:
@@ -173,11 +301,11 @@ class AshBeast(Upgrade):
     
     @classmethod
     def is_ash_beast(cls, unit):
-        if unit.get_stat('ash_beast'):
+        if unit.has_buff(AshBeast):
             return True
         return unit.resists[Tags.Dark] >= 100 and unit.resists[Tags.Fire] >= 100
         
 
 
-all_player_spell_constructors.extend([Flamewave])
+all_player_spell_constructors.extend([Flamewave, ForgeStrike, ConjureBlade])
 skill_constructors.extend([AshBeast])

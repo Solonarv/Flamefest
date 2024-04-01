@@ -21,9 +21,11 @@ mods/
 
 ### Spells
 
-#### Flame Wave
+#### Pyroclasm
 
-> Unleash a slow-moving wave of fire that deals 23 fire damage to units in a 12 tile cone. Max 1 flamewave at a time.
+level 4; fire sorcery; 6 charges; 12 range
+
+> Unleash a slow-moving wave of fire that deals 23 fire damage to units in a 12 tile cone. Max 1 pyroclasm at a time.
 
 - 3 SP: +4 range
 - 3 SP: +17 damage
@@ -32,9 +34,36 @@ mods/
 Wave is two tiles thick and moves 1 tile per turn. Firestorms are created in the 'back' half of the wave, and deal
 damage equal to half the wave's spell damage stat.
 
-#### Flame Wave End
+#### Pyroclasm End
 
-> End an ongoing Flame Wave spell.
+> End an ongoing Pyroclasm spell.
+
+#### Forge Strike
+
+level 2; fire sorcery metallic; 16 charges; melee
+
+> Slam down a hammer strike onto the target tile dealing 18 physical damage.  
+> Then a wave of forge fire washes out, burning all units in a 5 tile cone for 18 physical damage.
+
+Upgrades TBD.
+
+#### Conjure Blade (unfinished)
+
+level 3; metallic conjuration; 3 charges
+
+> Conjure a magic greatsword that you can swing in great arcs dealing 29 physical damage.
+> The sword lasts for 12 turns.
+
+Upgrades TBD.
+
+#### Great Cleave (unfinished)
+
+metallic; free; castable only while you have conjure blade buff
+
+granted by conjure blade (permanently)
+
+> \[swing your sword dealing damage in a 5 tile cone]
+
 
 ### Skills
 
