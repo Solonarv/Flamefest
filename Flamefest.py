@@ -143,18 +143,28 @@ class ConjureBlade(Spell):
         self.duration = 12
         self.range = 0
         self.radius = 5
-        self.damage = 29
+        self.damage = 19
         self.can_target_self = True
 
-        self.active = False
+        self.great_rotation = 0
+        self.redeal = 0
+
+        self.upgrades['damage'] = (18, 2)
+        self.upgrades['radius'] = (4, 2)
+        self.upgrades['duration'] = (15, 3)
+        self.upgrades['great_rotation'] = (1, 3, "Great Rotation", "Great Cleave affects a 360 degree arc.")
+        self.upgrades['redeal'] = (1, 4, "Blessed Blade", "Also deals arcane and holy damage.")
     
     def get_description(self):
         return ("Conjure a magic greatsword that you can swing in great arcs dealing [{damage}_physical:physical] damage.\n"
-                "The sword lasts for [{duration}_turns:duration]"
+                "The sword lasts for [{duration}_turns:duration]."
                 ).format(**self.fmt_dict())
     
     def cast_instant(self, x, y):
         self.caster.apply_buff(ConjureBladeBuff(self), self.get_stat('duration'))
+    
+    def get_impacted_tiles(self, x, y):
+        return [Point(x,y)]
 
 class ConjureBladeBuff(Buff):
     def __init__(self, spell):
@@ -186,6 +196,12 @@ class ConjureBladeSwing(Spell):
         self.tags = self.parent.tags
         self.angle = math.pi / 3
     
+    def get_description(self):
+        shape = "circle" if self.get_stat('great_rotation') else "wide arc"
+        damage = self.get_stat('damage')
+        return (f"Swing your conjured blade in a {shape}, dealing [{damage}_physical:physical] damage."
+                )
+    
     def get_stat(self, stat, base=None):
         if stat in ConjureBladeSwing.own_stats:
             return super().get_stat(stat, base)
@@ -196,31 +212,47 @@ class ConjureBladeSwing(Spell):
         origin = Point(self.owner.x, self.owner.y)
         dist = self.get_stat('radius')
         step_size = 0.4 / dist
-        midline = get_line_angle(...) # TODO
-        angle = midline - self.angle
+        width = math.pi if self.get_stat('great_rotation') else self.angle
+        midline = math.atan2(y - origin.y, x - origin.x)
+        angle = midline - width
         already_hit = set()
-        while angle < midline + self.angle:
-            dx = cos(angle)
-            dy = sin(angle)
-            r = 1
+        while angle < midline + width:
+            dx = math.cos(angle)
+            dy = math.sin(angle)
             stage = []
-            last_p = None
-            while r <= dist:
-                p = Point(dx*r, dy*r)
-                if not self.owner.level.can_walk(p.x, p.y):
+            r = dist
+            while r > 0:
+                target = Point(round(dx*r) + origin.x, round(dy*r) + origin.y)
+                if self.owner.level.is_point_in_bounds(target) and self.owner.level.can_see(origin.x, origin.y, target.x, target.y):
                     break
-                if p != last_p and p not in already_hit:
-                    already_hit.insert(p)
-                    stage.append(p)
+                r -= 0.5
+            else:
+                break
+            stage = self.owner.level.get_points_in_line(origin, target, find_clear=True)
+            stage = [p for p in stage if p != origin and p not in already_hit]
             if stage:
+                already_hit.update(stage)
                 yield stage
             angle += step_size
 
     def cast(self, x, y):
+        dtypes = [Tags.Physical]
+        if self.get_stat('redeal'):
+            dtypes += [Tags.Arcane, Tags.Holy]
         for stage in self.aoe(x, y):
             for point in stage:
-                self.owner.level.deal_damage(point.x, point.y, self.get_stat('damage'), Tags.Physical, self)
+                for ty in dtypes:
+                    self.owner.level.deal_damage(point.x, point.y, self.get_stat('damage'), ty, self)
             yield
+    
+    def can_cast(self, x, y):
+        return super().can_cast(x, y) and self.owner.has_buff(ConjureBladeBuff)
+    
+    def can_pay_costs(self):
+        return super().can_pay_costs() and self.owner.has_buff(ConjureBladeBuff)
+    
+    def get_impacted_tiles(self, x, y):
+        return [p for stage in self.aoe(x, y) for p in stage]
         
 
         
