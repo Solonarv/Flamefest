@@ -4,6 +4,8 @@ from Upgrades import *
 from CommonContent import *
 import random
 
+from mods.Flamefest.monkeypatch import monkeypatch
+
 class Flamewave(Spell):
 
     def on_init(self):
@@ -255,8 +257,8 @@ class ConjureBladeSwing(Spell):
         return [p for stage in self.aoe(x, y) for p in stage]
         
 
-        
-class FireCloudPatch:
+@monkeypatch(FireCloud)
+class patch_FireCloud:
     def __init__(self, owner, damage=6):
         Cloud.__init__(self)
         self.owner = owner
@@ -274,9 +276,6 @@ class FireCloudPatch:
         if unit and AshBeast.is_ash_beast(unit):
             return
         self.level.deal_damage(self.x, self.y, self.damage, Tags.Fire, self.source or self)
-
-    FireCloud.__init__ = __init__
-    _old_on_advance = FireCloud.on_advance
 
 
 
@@ -336,8 +335,45 @@ class AshBeast(Upgrade):
         if unit.has_buff(AshBeast):
             return True
         return unit.resists[Tags.Dark] >= 100 and unit.resists[Tags.Fire] >= 100
-        
 
+# patch Tags to be less silly
+@monkeypatch(NameLookupCollection)
+class patch_Tags:
+    def __init__(self, elements):
+        self.elements = elements  # compat
+        self.initialize_dict()
+    
+    def __getattr__(self, name):
+        if name not in self.dict:
+            self.initialize_dict()
+        return self.dict[name]
+    
+    def _getdict(self):
+        try:
+            return self.dict
+        except AttributeError:
+            self.dict = {}
+            return self.dict
+    
+    def initialize_dict(self):
+        self.dict = {el.name: el for el in self.elements}
+    
+    def add(self, element):
+        self.elements.append(element)  # compat
+        self._getdict()[element.name] = element
+    
+    def extend(self, elements):
+        self.elements.extend(elements)  # compat
+        for el in elements:
+            self._getdict()[el.name] = el
+
+
+Tags.initialize_dict()
+
+
+Tags.extend([
+    Tag("Martial", Color(174, 186, 152))
+])
 
 all_player_spell_constructors.extend([Flamewave, ForgeStrike, ConjureBlade])
 skill_constructors.extend([AshBeast])
