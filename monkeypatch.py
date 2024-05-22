@@ -79,8 +79,10 @@ def _do_patch(target, name, new):
         new._old_val = old
         @functools.wraps(new)
         def wrapped(*args, **kwargs):
-            return new(*args, **{old_argname: new._old_val}, **kwargs)
-        new = wrapped
-    setattr(target, name, new)
+            return new(*args, **{old_argname: new._old_val, **kwargs})
+        _new = wrapped
+    else:
+        _new = new
+    setattr(target, name, _new)
     
 

@@ -13,7 +13,7 @@ upgrades:
 - fling out bolts of physical damage (shrapnel)
 
 #### Conjure Blade
-lvl 3 spell; martial conjuration metallic
+lvl 3 spell; martial enchantment metallic
 
 conjure a greatsword that you can use to attack your enemies. lasts N turns
 

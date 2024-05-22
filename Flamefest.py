@@ -2,12 +2,50 @@ from Level import *
 from Spells import *
 from Upgrades import *
 from CommonContent import *
+import RiftWizard
 import random
 
 from mods.Flamefest.monkeypatch import monkeypatch
 
-class Flamewave(Spell):
+# patch Tags to be less silly
+@monkeypatch(NameLookupCollection)
+class patch_Tags:
+    def __init__(self, elements):
+        self.elements = elements  # compat
+        self.initialize_dict()
+    
+    def __getattr__(self, name):
+        if name not in self.dict:
+            self.initialize_dict()
+        return self.dict[name]
+    
+    def _getdict(self):
+        try:
+            return self.dict
+        except AttributeError:
+            self.dict = {}
+            return self.dict
+    
+    def initialize_dict(self):
+        self.dict = {el.name: el for el in self.elements}
+    
+    def add(self, element):
+        self.elements.append(element)  # compat
+        self._getdict()[element.name] = element
+    
+    def extend(self, elements):
+        self.elements.extend(elements)  # compat
+        for el in elements:
+            self._getdict()[el.name] = el
 
+
+Tags.initialize_dict()
+
+Tags.extend([
+    Tag("Martial", Color(174, 186, 152))
+])
+
+class Flamewave(Spell):
     def on_init(self):
         self.name = "Pyroclasm"
         self.tags = [Tags.Sorcery, Tags.Fire]
@@ -46,7 +84,6 @@ class Flamewave(Spell):
         return [p for stage in self.aoe(Point(x,y)) for p in stage]
 
 class FlamewaveEnd(Spell):
-    
     def on_init(self):
         self.name = "Pyroclasm End"
         # Not a "real" spell - no level, no tags
@@ -102,7 +139,7 @@ class ForgeStrike(Spell):
     def on_init(self):
         self.name = "Forge Strike"
         self.level = 2
-        self.tags = [Tags.Sorcery, Tags.Metallic, Tags.Fire]
+        self.tags = [Tags.Sorcery, Tags.Metallic, Tags.Fire, Tags.Martial]
         self.max_charges = 16
         self.range = 1
         self.melee = True
@@ -140,7 +177,7 @@ class ConjureBlade(Spell):
     def on_init(self):
         self.name = "Conjure Blade"
         self.level = 3
-        self.tags = [Tags.Conjuration, Tags.Metallic]
+        self.tags = [Tags.Enchantment, Tags.Metallic, Tags.Martial]
         self.max_charges = 3
         self.duration = 12
         self.range = 0
@@ -255,7 +292,78 @@ class ConjureBladeSwing(Spell):
     
     def get_impacted_tiles(self, x, y):
         return [p for stage in self.aoe(x, y) for p in stage]
-        
+
+class SteelFlourish(Teleport):
+    def on_init(self):
+        self.range = 7
+        self.requires_los = False
+        self.quick_cast = True
+        self.name = "Quick Leap"
+        self.max_charges = 2
+        self.tags = [Tags.Martial, Tags.Sorcery, Tags.Translocation]
+        self.level = 3
+        self.damage = 11
+
+        self.upgrades['range'] = (5, 3)
+        self.add_upgrade(SteelFlourishRefill(self, 'charge_refill', 1, 3, None, "Steel Flourish", "Regains 1 charge whenever you use another martial spell."))
+        self.upgrades['requires_los'] = (-1, 2, "Blindcasting", "Steel Flourish can be cast without line of sight.")
+        self.upgrades['trample'] = (1, 2, "Trample", "/NOT_IMPL/ Steel Flourish can target occupied tiles.\nObstacles will be moved out of the way.", "technique")
+        self.upgrades['flying_slash'] = (1, 3, "Flying Slash", f"/NOT_IMPL/ Steel Flourish deals {self.damage} damage to all enemies on the path.", "technique")
+    
+    def get_description(self):
+        verb = "Leap" if self.get_stat('requires_los') else "Teleport"
+        descr = f"{verb} to target tile."
+        if self.get_stat('flying_slash'):
+            damage = self.get_stat('damage')
+            descr += f"\nDeals [{damage}_physical:physical] damage to all enemies in the path."
+        return descr
+
+    def can_cast(self, x, y):
+        return (Spell.can_cast(self, x, y) and
+                self.caster.level.can_move(self.caster, x, y, 
+                    teleport=True, force_swap=self.get_stat('trample')))
+
+    def cast(self, x, y):
+        start_loc = Point(self.caster.x, self.caster.y)
+
+        self.caster.level.show_effect(self.caster.x, self.caster.y, Tags.Translocation)
+        p = self.caster.level.get_summon_point(x, y)
+        if p:
+            yield self.caster.level.act_move(self.caster, p.x, p.y, teleport=True)
+            self.caster.level.show_effect(self.caster.x, self.caster.y, Tags.Translocation)
+
+        # if self.get_stat('void_teleport'):
+        #     for unit in self.owner.level.get_units_in_los(self.caster):
+        #         if are_hostile(self.owner, unit):
+        #             unit.deal_damage(self.get_stat('max_charges'), Tags.Arcane, self)
+
+        # if self.get_stat('lightning_blink') or self.get_stat('dark_blink'):
+        #     dtype = Tags.Lightning if self.get_stat('lightning_blink') else Tags.Dark
+        #     damage = math.ceil(2*distance(start_loc, Point(x, y)))
+        #     for stage in Burst(self.caster.level, Point(x, y), 3):
+        #         for point in stage:
+        #             if point == Point(x, y):
+        #                 continue
+        #             self.caster.level.deal_damage(point.x, point.y, damage, dtype, self)
+
+class SteelFlourishRefill(SpellUpgrade):
+    def on_spell_cast(self, evt):
+        flourish_spell = None
+        for s in self.owner.spells:
+            if isinstance(s, SteelFlourish):
+                flourish_spell = s
+                break
+        if not flourish_spell:
+            return
+        if Tags.Martial in evt.spell.tags and evt.spell != flourish_spell and evt.spell.max_charges != 0:
+            flourish_spell.refund_charges(1)
+
+@monkeypatch(SilverSpearSpell)
+class patch_SilverSpearSpell:
+    @monkeypatch.cfg(inject_old=True)
+    def on_init(self, _old):
+        _old(self)
+        self.tags += [Tags.Martial]
 
 @monkeypatch(FireCloud)
 class patch_FireCloud:
@@ -336,44 +444,23 @@ class AshBeast(Upgrade):
             return True
         return unit.resists[Tags.Dark] >= 100 and unit.resists[Tags.Fire] >= 100
 
-# patch Tags to be less silly
-@monkeypatch(NameLookupCollection)
-class patch_Tags:
-    def __init__(self, elements):
-        self.elements = elements  # compat
-        self.initialize_dict()
-    
-    def __getattr__(self, name):
-        if name not in self.dict:
-            self.initialize_dict()
-        return self.dict[name]
-    
-    def _getdict(self):
-        try:
-            return self.dict
-        except AttributeError:
-            self.dict = {}
-            return self.dict
-    
-    def initialize_dict(self):
-        self.dict = {el.name: el for el in self.elements}
-    
-    def add(self, element):
-        self.elements.append(element)  # compat
-        self._getdict()[element.name] = element
-    
-    def extend(self, elements):
-        self.elements.extend(elements)  # compat
-        for el in elements:
-            self._getdict()[el.name] = el
 
+class MartialLord(Upgrade):
+    def on_init(self):
+        self.name = "Arch Warrior"
+        self.tags = [Tags.Martial]
+        self.level = 7
+        self.tag_bonuses[Tags.Martial]["max_charges"] = 2
+        self.tag_bonuses[Tags.Martial]["damage"] = 8
+        self.tag_bonuses[Tags.Martial]["radius"] = 2
 
-Tags.initialize_dict()
+@monkeypatch(RiftWizard.PyGameView)
+class patch_PyGameView:
+    @monkeypatch.cfg(inject_old=True)
+    def __init__(self, _old):
+        _old(self)
+        self.tag_keys['k'] = Tags.Martial
+        self.reverse_tag_keys[Tags.Martial] = 'K'
 
-
-Tags.extend([
-    Tag("Martial", Color(174, 186, 152))
-])
-
-all_player_spell_constructors.extend([Flamewave, ForgeStrike, ConjureBlade])
-skill_constructors.extend([AshBeast])
+all_player_spell_constructors.extend([Flamewave, ForgeStrike, ConjureBlade, SteelFlourish])
+skill_constructors.extend([AshBeast, MartialLord])
